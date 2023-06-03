@@ -132,12 +132,71 @@ const getAllReservations = function(guest_id, limit = 10) {
  * @return {Promise<[{}]>}  A promise to the properties.
  */
 const getAllProperties = function(options, limit = 10) {
-  const queryString = `
-  SELECT *
-  FROM properties
-  LIMIT $1;
+  const values = [];
+
+  let queryString = `
+    SELECT properties.*, avg(property_reviews.rating) as average_rating
+    FROM properties
+    LEFT JOIN property_reviews ON properties.id = property_id
+
   `;
-  const values = [limit];
+
+  if (options.city) {
+    values.push(`%${options.city}%`);
+    queryString += `WHERE city LIKE $${values.length} `;
+  }
+
+  if (options.owner_id) {
+    values.push(`%${options.owner_id}%`);
+    if (values.length === 1) {
+      queryString += `WHERE owner_id LIKE $${values.length} `;
+    } else{
+      queryString += `AND owner_id LIKE $${values.length} `;
+
+    }
+
+  }
+
+  if (options.minimum_price_per_night && options.maximum_price_per_night) {
+    values.push(`${options.minimum_price_per_night * 100}`);
+    if (values.length === 1) {
+      queryString += `WHERE cost_per_night BETWEEN $${values.length} `;
+      
+      values.push(`${options.maximum_price_per_night * 100}`);
+      queryString += `AND $${values.length} `;
+      
+    } else{
+      queryString += `AND cost_per_night BETWEEN $${values.length} `;
+      
+      values.push(`${options.maximum_price_per_night * 100}`);
+      queryString += `AND $${values.length} `;
+    }
+
+  }
+
+  if (options.minimum_rating) {
+    values.push(`${options.minimum_rating}`);
+    if (values.length === 1) {
+      queryString += `WHERE minimum_rating > $${values.length} `;
+    } else{
+      queryString += `AND minimum_rating > $${values.length} `;
+
+    }
+  }
+
+  values.push(limit);
+  queryString += `
+  GROUP BY properties.id
+  ORDER BY cost_per_night
+  LIMIT $${values.length};
+  `;
+
+
+  console.log(queryString, values);
+
+
+
+
   return pool
     .query(queryString, values)
     .then((result) => {
@@ -147,6 +206,7 @@ const getAllProperties = function(options, limit = 10) {
       console.log(err.message);
     });
 };
+
 
 /**
  * Add a property to the database
